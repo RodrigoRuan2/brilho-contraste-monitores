@@ -2,6 +2,14 @@
 
 Aplicativo leve para Windows que ajusta **brilho e contraste de monitores externos** por DDC/CI. Cada monitor tem seus próprios controles. O app salva os últimos valores, fica na bandeja e pode iniciar com o Windows.
 
+## Perfis
+
+Escolha **Jogo**, **Trabalho** ou **Noite** na janela. Ajuste brilho e contraste das telas e clique em **Salvar atual**. Depois, **Aplicar** recupera os valores desse perfil. Também é possível salvar e aplicar pelo menu do ícone na bandeja. Os perfis são guardados em `%LOCALAPPDATA%\BrilhoDosMonitores\profiles.json`. O último ajuste aplicado continua sendo restaurado quando o app abre.
+
+## Reconexão automática
+
+Quando o Windows informa que a configuração das telas mudou, um monitor foi reconectado ou o PC voltou da suspensão, o app procura as telas novamente e restaura os últimos valores salvos. Se o monitor ainda não estiver pronto, tenta novamente algumas vezes. O botão **Atualizar** continua disponível para casos em que o Windows não avisa sobre a mudança.
+
 ## Baixar
 
 [Baixar BrilhoDosMonitores.exe](https://github.com/RodrigoRuan2/brilho-contraste-monitores/releases/latest/download/BrilhoDosMonitores.exe)
