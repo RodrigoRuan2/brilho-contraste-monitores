@@ -6,6 +6,6 @@ if (-not (Test-Path -LiteralPath $compiler)) {
 $outputDirectory = Join-Path $PSScriptRoot 'dist'
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $output = Join-Path $outputDirectory 'BrilhoDosMonitores.exe'
-& $compiler /nologo /target:winexe /platform:x64 "/win32icon:$PSScriptRoot\BrilhoDosMonitores.ico" "/out:$output" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "$PSScriptRoot\BrilhoDosMonitores.cs"
+& $compiler /nologo /target:winexe /platform:x64 "/win32icon:$PSScriptRoot\BrilhoDosMonitores.ico" "/out:$output" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.Xml.dll "$PSScriptRoot\BrilhoDosMonitores.cs"
 if ($LASTEXITCODE -ne 0) { throw "Falha na compilação: código $LASTEXITCODE" }
 Write-Output "Gerado: $output"

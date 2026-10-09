@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using System.Xml;
 using Microsoft.Win32;
 
 namespace BrilhoDosMonitores
@@ -213,16 +217,11 @@ namespace BrilhoDosMonitores
         private readonly List<MonitorState> monitors = new List<MonitorState>();
         private readonly List<SliderControl> sliders = new List<SliderControl>();
         private readonly Dictionary<string, Dictionary<string, int>> settings;
-        private readonly Dictionary<string, Dictionary<string, Dictionary<string, int>>> profiles;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly NotifyIcon tray;
         private readonly FlowLayoutPanel cards;
         private readonly Label status;
-        private readonly ComboBox profilePicker;
         private readonly System.Windows.Forms.Timer reconnectTimer;
-        private readonly ToolStripMenuItem profileMenu;
-        private readonly ToolStripMenuItem saveProfileMenu;
-        private static readonly string[] ProfileNames = { "Jogo", "Trabalho", "Noite" };
         private bool exiting;
         private bool balloonShown;
         private int reconnectAttempts;
@@ -230,6 +229,7 @@ namespace BrilhoDosMonitores
         private bool lastRefreshFailed;
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunValueName = "BrilhoDosMonitores";
+        private const string TaskName = "BrilhoDosMonitores";
 
         private static string InstalledPath
         {
@@ -248,16 +248,11 @@ namespace BrilhoDosMonitores
             }
         }
 
-        private static string ProfilesPath
-        {
-            get { return Path.Combine(Path.GetDirectoryName(SettingsPath), "profiles.json"); }
-        }
-
         internal MainForm(bool startInTray)
         {
             Text = "Brilho e Contraste";
-            ClientSize = new Size(560, 570);
-            MinimumSize = new Size(560, 500);
+            ClientSize = new Size(560, 530);
+            MinimumSize = new Size(460, 500);
             StartPosition = FormStartPosition.CenterScreen;
             if (startInTray)
             {
@@ -269,7 +264,7 @@ namespace BrilhoDosMonitores
             ForeColor = Color.FromArgb(242, 247, 255);
             Font = new Font("Segoe UI", 10);
             settings = LoadSettings();
-            profiles = LoadProfiles();
+            MigrateStartup();
             reconnectTimer = new System.Windows.Forms.Timer();
             reconnectTimer.Interval = 1800;
             reconnectTimer.Tick += delegate
@@ -286,7 +281,7 @@ namespace BrilhoDosMonitores
 
             Panel header = new Panel();
             header.Dock = DockStyle.Top;
-            header.Height = 130;
+            header.Height = 87;
             Controls.Add(header);
             Label heading = NewLabel("Brilho e contraste", 21, FontStyle.Bold);
             heading.SetBounds(25, 14, 380, 32);
@@ -305,36 +300,6 @@ namespace BrilhoDosMonitores
             refresh.ForeColor = ForeColor;
             refresh.Click += delegate { RefreshMonitors(); };
             header.Controls.Add(refresh);
-
-            Label profileLabel = NewLabel("Perfil", 9, FontStyle.Regular);
-            profileLabel.ForeColor = Color.FromArgb(168, 185, 210);
-            profileLabel.SetBounds(27, 88, 50, 24);
-            header.Controls.Add(profileLabel);
-            profilePicker = new ComboBox();
-            profilePicker.DropDownStyle = ComboBoxStyle.DropDownList;
-            profilePicker.Items.AddRange(ProfileNames);
-            profilePicker.SelectedIndex = 0;
-            profilePicker.SetBounds(78, 85, 172, 28);
-            header.Controls.Add(profilePicker);
-            Button applyProfile = new Button();
-            applyProfile.Text = "Aplicar";
-            applyProfile.SetBounds(267, 84, 95, 30);
-            applyProfile.FlatStyle = FlatStyle.Flat;
-            applyProfile.FlatAppearance.BorderSize = 0;
-            applyProfile.BackColor = Color.FromArgb(35, 55, 77);
-            applyProfile.ForeColor = ForeColor;
-            applyProfile.Click += delegate { ApplyProfile((string)profilePicker.SelectedItem); };
-            header.Controls.Add(applyProfile);
-            Button saveProfile = new Button();
-            saveProfile.Text = "Salvar atual";
-            saveProfile.SetBounds(373, 84, 160, 30);
-            saveProfile.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            saveProfile.FlatStyle = FlatStyle.Flat;
-            saveProfile.FlatAppearance.BorderSize = 0;
-            saveProfile.BackColor = Color.FromArgb(35, 55, 77);
-            saveProfile.ForeColor = ForeColor;
-            saveProfile.Click += delegate { SaveProfile((string)profilePicker.SelectedItem); };
-            header.Controls.Add(saveProfile);
 
             status = NewLabel("Detectando monitores...", 9, FontStyle.Regular);
             status.ForeColor = Color.FromArgb(168, 185, 210);
@@ -356,21 +321,6 @@ namespace BrilhoDosMonitores
 
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add("Abrir", null, delegate { ShowWindow(); });
-            profileMenu = new ToolStripMenuItem("Aplicar perfil");
-            saveProfileMenu = new ToolStripMenuItem("Salvar perfil atual");
-            foreach (string name in ProfileNames)
-            {
-                string selectedName = name;
-                ToolStripMenuItem applyItem = new ToolStripMenuItem(selectedName);
-                applyItem.Click += delegate { ApplyProfile(selectedName); };
-                profileMenu.DropDownItems.Add(applyItem);
-                ToolStripMenuItem saveItem = new ToolStripMenuItem(selectedName);
-                saveItem.Click += delegate { SaveProfile(selectedName); };
-                saveProfileMenu.DropDownItems.Add(saveItem);
-            }
-            profileMenu.DropDownOpening += delegate { UpdateProfileMenu(); };
-            menu.Items.Add(profileMenu);
-            menu.Items.Add(saveProfileMenu);
             ToolStripMenuItem startup = new ToolStripMenuItem("Iniciar com o Windows");
             startup.Checked = AutoStartEnabled();
             startup.Click += delegate { ToggleAutoStart(startup); };
@@ -420,105 +370,6 @@ namespace BrilhoDosMonitores
             return new Dictionary<string, Dictionary<string, int>>();
         }
 
-        private Dictionary<string, Dictionary<string, Dictionary<string, int>>> LoadProfiles()
-        {
-            try
-            {
-                if (File.Exists(ProfilesPath))
-                {
-                    Dictionary<string, Dictionary<string, Dictionary<string, int>>> loaded =
-                        json.Deserialize<Dictionary<string, Dictionary<string, Dictionary<string, int>>>>(File.ReadAllText(ProfilesPath, Encoding.UTF8));
-                    if (loaded != null) return loaded;
-                }
-            }
-            catch (Exception) { }
-            return new Dictionary<string, Dictionary<string, Dictionary<string, int>>>();
-        }
-
-        private bool SaveProfiles()
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(ProfilesPath));
-                string temp = ProfilesPath + ".tmp";
-                File.WriteAllText(temp, json.Serialize(profiles), Encoding.UTF8);
-                if (File.Exists(ProfilesPath)) File.Replace(temp, ProfilesPath, null); else File.Move(temp, ProfilesPath);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                status.Text = "Não foi possível salvar o perfil: " + ex.Message;
-                return false;
-            }
-        }
-
-        private void SaveProfile(string name)
-        {
-            if (String.IsNullOrEmpty(name) || monitors.Count == 0)
-            {
-                status.Text = "Nenhum monitor disponível para salvar o perfil.";
-                return;
-            }
-            FlushPending();
-            Dictionary<string, Dictionary<string, int>> values;
-            if (!profiles.TryGetValue(name, out values) || values == null)
-                values = new Dictionary<string, Dictionary<string, int>>();
-            bool captured = false;
-            foreach (MonitorState monitor in monitors)
-            {
-                Dictionary<string, int> monitorValues;
-                if (!values.TryGetValue(monitor.DeviceId, out monitorValues) || monitorValues == null)
-                    monitorValues = new Dictionary<string, int>();
-                if (monitor.BrightAvailable) { monitorValues["brightness"] = monitor.Percent(true); captured = true; }
-                if (monitor.ContrastAvailable) { monitorValues["contrast"] = monitor.Percent(false); captured = true; }
-                if (monitorValues.Count > 0) values[monitor.DeviceId] = monitorValues;
-            }
-            if (!captured)
-            {
-                status.Text = "Não foi possível ler os ajustes dos monitores.";
-                return;
-            }
-            profiles[name] = values;
-            if (!SaveProfiles()) return;
-            UpdateProfileMenu();
-            status.Text = "Perfil " + name + " salvo.";
-        }
-
-        private void ApplyProfile(string name)
-        {
-            Dictionary<string, Dictionary<string, int>> values;
-            if (String.IsNullOrEmpty(name) || !profiles.TryGetValue(name, out values) || values == null || values.Count == 0)
-            {
-                status.Text = "Salve o perfil " + name + " antes de aplicar.";
-                return;
-            }
-            FlushPending();
-            foreach (KeyValuePair<string, Dictionary<string, int>> entry in values)
-            {
-                if (entry.Value == null) continue;
-                Dictionary<string, int> saved;
-                if (!settings.TryGetValue(entry.Key, out saved) || saved == null)
-                {
-                    saved = new Dictionary<string, int>();
-                    settings[entry.Key] = saved;
-                }
-                foreach (KeyValuePair<string, int> adjustment in entry.Value)
-                    saved[adjustment.Key] = adjustment.Value;
-            }
-            SaveSettings();
-            RefreshMonitors();
-            if (!lastRefreshFailed && monitors.Count > 0) status.Text = "Perfil " + name + " aplicado aos monitores disponíveis.";
-        }
-
-        private void UpdateProfileMenu()
-        {
-            for (int i = 0; i < ProfileNames.Length; i++)
-            {
-                Dictionary<string, Dictionary<string, int>> values;
-                profileMenu.DropDownItems[i].Enabled = profiles.TryGetValue(ProfileNames[i], out values) && values != null && values.Count > 0;
-            }
-        }
-
         private void SaveSettings()
         {
             string path = SettingsPath;
@@ -535,7 +386,7 @@ namespace BrilhoDosMonitores
             }
         }
 
-        private static bool AutoStartEnabled()
+        private static bool LegacyRunEnabled()
         {
             try
             {
@@ -548,14 +399,105 @@ namespace BrilhoDosMonitores
             catch (Exception) { return false; }
         }
 
+        private static void RemoveLegacyRun()
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
+                if (key != null) key.DeleteValue(RunValueName, false);
+        }
+
+        private static int RunSchtasks(string arguments, out string output)
+        {
+            ProcessStartInfo start = new ProcessStartInfo();
+            start.FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe");
+            start.Arguments = arguments;
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            start.WindowStyle = ProcessWindowStyle.Hidden;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
+            using (Process process = Process.Start(start))
+            {
+                output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                return process.ExitCode;
+            }
+        }
+
+        private static bool ScheduledTaskExists()
+        {
+            string output;
+            return RunSchtasks("/Query /TN \"" + TaskName + "\" /XML", out output) == 0;
+        }
+
+        private static bool ScheduledTaskEnabled()
+        {
+            try
+            {
+                string output;
+                if (RunSchtasks("/Query /TN \"" + TaskName + "\" /XML", out output) != 0) return false;
+                XmlDocument xml = new XmlDocument();
+                xml.LoadXml(output);
+                XmlNode enabled = xml.SelectSingleNode("//*[local-name()='Settings']/*[local-name()='Enabled']");
+                XmlNode command = xml.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']/*[local-name()='Command']");
+                if (enabled != null && String.Equals(enabled.InnerText, "false", StringComparison.OrdinalIgnoreCase)) return false;
+                return command != null && String.Equals(Path.GetFullPath(command.InnerText.Trim('"')), Path.GetFullPath(InstalledPath), StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception) { return false; }
+        }
+
+        private static bool AutoStartEnabled()
+        {
+            return ScheduledTaskEnabled() || LegacyRunEnabled();
+        }
+
+        private static void RegisterScheduledTask()
+        {
+            string sid = SecurityElement.Escape(WindowsIdentity.GetCurrent().User.Value);
+            string executable = SecurityElement.Escape(InstalledPath);
+            string xml = "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n" +
+                "<Task version=\"1.4\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">" +
+                "<RegistrationInfo><Description>Abre Brilho e Contraste na bandeja.</Description></RegistrationInfo>" +
+                "<Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + sid + "</UserId><Delay>PT10S</Delay></LogonTrigger>" +
+                "<SessionStateChangeTrigger><Enabled>true</Enabled><UserId>" + sid + "</UserId><StateChange>SessionUnlock</StateChange><Delay>PT5S</Delay></SessionStateChangeTrigger></Triggers>" +
+                "<Principals><Principal id=\"Author\"><UserId>" + sid + "</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>" +
+                "<Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" +
+                "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Enabled>true</Enabled></Settings>" +
+                "<Actions Context=\"Author\"><Exec><Command>" + executable + "</Command><Arguments>--tray</Arguments></Exec></Actions></Task>";
+            string temp = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(temp, xml, Encoding.Unicode);
+                string output;
+                if (RunSchtasks("/Create /TN \"" + TaskName + "\" /XML \"" + temp + "\" /F", out output) != 0)
+                    throw new InvalidOperationException(output.Trim());
+            }
+            finally { File.Delete(temp); }
+        }
+
+        private static void MigrateStartup()
+        {
+            if (!LegacyRunEnabled()) return;
+            try
+            {
+                if (!ScheduledTaskEnabled()) RegisterScheduledTask();
+                RemoveLegacyRun();
+            }
+            catch (Exception) { /* A entrada antiga continua funcionando se a migração falhar. */ }
+        }
+
         private void ToggleAutoStart(ToolStripMenuItem item)
         {
             try
             {
                 if (item.Checked)
                 {
-                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true))
-                        if (key != null) key.DeleteValue(RunValueName, false);
+                    if (ScheduledTaskExists())
+                    {
+                        string output;
+                        if (RunSchtasks("/Delete /TN \"" + TaskName + "\" /F", out output) != 0)
+                            throw new InvalidOperationException(output.Trim());
+                    }
+                    RemoveLegacyRun();
                     item.Checked = false;
                     status.Text = "Inicialização com o Windows desativada.";
                 }
@@ -565,10 +507,10 @@ namespace BrilhoDosMonitores
                     Directory.CreateDirectory(Path.GetDirectoryName(target));
                     if (!String.Equals(Path.GetFullPath(Application.ExecutablePath), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
                         File.Copy(Application.ExecutablePath, target, true);
-                    using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKeyPath))
-                        key.SetValue(RunValueName, "\"" + target + "\" --tray", RegistryValueKind.String);
+                    RegisterScheduledTask();
+                    RemoveLegacyRun();
                     item.Checked = true;
-                    status.Text = "O app iniciará na bandeja ao entrar no Windows.";
+                    status.Text = "O app iniciará na bandeja ao entrar ou desbloquear o Windows.";
                 }
             }
             catch (Exception ex) { status.Text = "Não foi possível alterar a inicialização: " + ex.Message; }
