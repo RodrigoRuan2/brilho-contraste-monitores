@@ -209,6 +209,7 @@ namespace BrilhoDosMonitores
         internal bool Brightness;
         internal TrackBar Slider;
         internal Label Value;
+        internal Button[] QuickButtons;
         internal System.Windows.Forms.Timer Timer;
     }
 
@@ -229,6 +230,7 @@ namespace BrilhoDosMonitores
         private int reconnectAttempts;
         private int knownMonitorCount;
         private bool lastRefreshFailed;
+        private static readonly int[] QuickValues = { 10, 20, 50, 80, 100 };
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunValueName = "BrilhoDosMonitores";
         private const string TaskName = "BrilhoDosMonitores";
@@ -253,8 +255,8 @@ namespace BrilhoDosMonitores
         internal MainForm(bool startInTray)
         {
             Text = "Brilho e Contraste";
-            ClientSize = new Size(560, 530);
-            MinimumSize = new Size(460, 500);
+            ClientSize = new Size(560, 670);
+            MinimumSize = new Size(460, 520);
             StartPosition = FormStartPosition.CenterScreen;
             if (startInTray)
             {
@@ -604,7 +606,7 @@ namespace BrilhoDosMonitores
         private void AddCard(MonitorState monitor, int number)
         {
             Panel card = new Panel();
-            card.Height = 188;
+            card.Height = 248;
             card.Width = Math.Max(350, cards.ClientSize.Width - 45);
             card.BackColor = Color.FromArgb(27, 41, 64);
             card.Margin = new Padding(0, 0, 0, 11);
@@ -617,7 +619,7 @@ namespace BrilhoDosMonitores
             side.SetBounds(18, 35, 320, 20);
             card.Controls.Add(side);
             AddSlider(card, monitor, true, "Brilho", 59);
-            AddSlider(card, monitor, false, "Contraste", 120);
+            AddSlider(card, monitor, false, "Contraste", 151);
             cards.Controls.Add(card);
         }
 
@@ -651,16 +653,58 @@ namespace BrilhoDosMonitores
             control.Brightness = brightness;
             control.Slider = track;
             control.Value = value;
+            control.QuickButtons = new Button[QuickValues.Length];
             control.Timer = new System.Windows.Forms.Timer();
             control.Timer.Interval = 220;
             control.Timer.Tick += delegate { control.Timer.Stop(); ApplyControl(control); };
             track.ValueChanged += delegate
             {
                 value.Text = track.Value + "%";
+                UpdateQuickButtons(control);
                 control.Timer.Stop();
                 control.Timer.Start();
             };
+
+            TableLayoutPanel shortcuts = new TableLayoutPanel();
+            shortcuts.ColumnCount = QuickValues.Length;
+            shortcuts.RowCount = 1;
+            shortcuts.SetBounds(16, top + 58, card.Width - 32, 29);
+            shortcuts.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            shortcuts.BackColor = card.BackColor;
+            for (int i = 0; i < QuickValues.Length; i++)
+            {
+                shortcuts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / QuickValues.Length));
+                int quickValue = QuickValues[i];
+                Button quick = new Button();
+                quick.Text = quickValue + "%";
+                quick.Dock = DockStyle.Fill;
+                quick.Margin = new Padding(2, 0, 2, 0);
+                quick.FlatStyle = FlatStyle.Flat;
+                quick.FlatAppearance.BorderSize = 0;
+                quick.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+                quick.Enabled = available;
+                quick.Click += delegate
+                {
+                    control.Slider.Value = quickValue;
+                    control.Timer.Stop();
+                    ApplyControl(control);
+                };
+                control.QuickButtons[i] = quick;
+                shortcuts.Controls.Add(quick, i, 0);
+            }
+            card.Controls.Add(shortcuts);
+            UpdateQuickButtons(control);
             sliders.Add(control);
+        }
+
+        private void UpdateQuickButtons(SliderControl control)
+        {
+            for (int i = 0; i < QuickValues.Length; i++)
+            {
+                bool selected = control.Slider.Enabled && control.Slider.Value == QuickValues[i];
+                control.QuickButtons[i].BackColor = selected ? Color.FromArgb(95, 211, 192) : Color.FromArgb(35, 55, 77);
+                control.QuickButtons[i].ForeColor = selected ? Color.FromArgb(16, 24, 39) : ForeColor;
+            }
         }
 
         private void ResizeCards()

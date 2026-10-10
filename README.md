@@ -2,6 +2,8 @@
 
 Aplicativo leve para Windows que ajusta **brilho e contraste de monitores externos** por DDC/CI. Cada monitor tem seus próprios controles. O app salva os últimos valores, fica na bandeja e pode iniciar com o Windows.
 
+Em cada monitor, use os botões **10%, 20%, 50%, 80% e 100%** para ajustar brilho ou contraste com um clique. Os controles deslizantes continuam disponíveis para escolher outros valores. Cada mudança é salva automaticamente.
+
 ## Reconexão automática
 
 Quando o Windows informa que a configuração das telas mudou, um monitor foi reconectado ou o PC voltou da suspensão, o app procura as telas novamente e restaura os últimos valores salvos. Se o monitor ainda não estiver pronto, tenta novamente algumas vezes. O botão **Atualizar** continua disponível para casos em que o Windows não avisa sobre a mudança.
