@@ -12,6 +12,8 @@ Quando o Windows informa que a configuração das telas mudou, um monitor foi re
 
 Abra o executável. Para manter o app na bandeja, feche a janela pelo **X**. Clique duas vezes no ícone da bandeja para reabrir, ou clique com o botão direito e escolha **Sair** para encerrar.
 
+Se você abrir o app enquanto ele ainda está iniciando com o Windows, a janela aparecerá assim que a detecção dos monitores terminar.
+
 ## Iniciar com o Windows
 
 No menu do ícone da bandeja, marque **Iniciar com o Windows**. O app copia o executável para uma pasta estável do usuário e cria uma tarefa do Windows para abrir na bandeja ao entrar ou desbloquear a sessão. Se o app já estiver aberto, a tarefa não cria outra instância. Desmarque a opção no mesmo menu para desativar a inicialização automática.

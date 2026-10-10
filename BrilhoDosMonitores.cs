@@ -224,6 +224,8 @@ namespace BrilhoDosMonitores
         private readonly System.Windows.Forms.Timer reconnectTimer;
         private bool exiting;
         private bool balloonShown;
+        private volatile bool startupReady;
+        private volatile bool showRequested;
         private int reconnectAttempts;
         private int knownMonitorCount;
         private bool lastRefreshFailed;
@@ -344,6 +346,8 @@ namespace BrilhoDosMonitores
                     WindowState = FormWindowState.Normal;
                     Opacity = 1;
                 }
+                startupReady = true;
+                if (showRequested) ShowRequestedWindow();
             };
             FormClosing += OnClosing;
             FormClosed += delegate { reconnectTimer.Dispose(); tray.Visible = false; tray.Dispose(); };
@@ -700,6 +704,20 @@ namespace BrilhoDosMonitores
             Native.SetForegroundWindow(Handle);
         }
 
+        internal void RequestShow()
+        {
+            showRequested = true;
+            if (startupReady && IsHandleCreated)
+                BeginInvoke(new Action(ShowRequestedWindow));
+        }
+
+        private void ShowRequestedWindow()
+        {
+            if (!startupReady || !showRequested || IsDisposed) return;
+            showRequested = false;
+            ShowWindow();
+        }
+
         private void OnClosing(object sender, FormClosingEventArgs args)
         {
             FlushPending();
@@ -774,7 +792,7 @@ namespace BrilhoDosMonitores
                             {
                                 signal.WaitOne();
                                 if (form.IsDisposed) return;
-                                if (form.IsHandleCreated) form.BeginInvoke(new Action(form.ShowWindow));
+                                form.RequestShow();
                             }
                             catch (ObjectDisposedException) { return; }
                             catch (InvalidOperationException) { return; }
