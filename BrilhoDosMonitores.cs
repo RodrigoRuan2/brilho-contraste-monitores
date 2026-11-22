@@ -258,9 +258,9 @@ namespace BrilhoDosMonitores
             ClientSize = new Size(560, 670);
             MinimumSize = new Size(460, 520);
             StartPosition = FormStartPosition.CenterScreen;
+            ShowInTaskbar = false;
             if (startInTray)
             {
-                ShowInTaskbar = false;
                 WindowState = FormWindowState.Minimized;
                 Opacity = 0;
             }
@@ -741,7 +741,6 @@ namespace BrilhoDosMonitores
 
         internal void ShowWindow()
         {
-            ShowInTaskbar = true;
             Show();
             WindowState = FormWindowState.Normal;
             Activate();

@@ -12,7 +12,7 @@ Quando o Windows informa que a configuração das telas mudou, um monitor foi re
 
 [Baixar BrilhoDosMonitores.exe](https://github.com/RodrigoRuan2/brilho-contraste-monitores/releases/latest/download/BrilhoDosMonitores.exe)
 
-Abra o executável. Para manter o app na bandeja, feche a janela pelo **X**. Clique duas vezes no ícone da bandeja para reabrir, ou clique com o botão direito e escolha **Sair** para encerrar.
+Abra o executável. O ícone tem fundo transparente e o app fica apenas na bandeja do Windows, inclusive com a janela aberta. Feche a janela pelo **X** para mantê-lo na bandeja. Clique duas vezes no ícone da bandeja para reabrir, ou clique com o botão direito e escolha **Sair** para encerrar.
 
 Se você abrir o app enquanto ele ainda está iniciando com o Windows, a janela aparecerá assim que a detecção dos monitores terminar.
 
